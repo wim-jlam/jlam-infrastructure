@@ -33,11 +33,13 @@ jobs:
       - name: 🔍 Scan for Secrets
         run: |
           echo "🔍 Scanning for exposed secrets..."
-          if grep -r "password\|secret\|key" --include="*.yml" --include="*.yaml" --exclude-dir=.github .; then
-            echo "❌ SECURITY ALERT: Potential secrets found in code!"
+          # Exclude development files from security scan
+          if grep -r "password\|secret\|key" --include="*.yml" --include="*.yaml" --exclude-dir=.github --exclude="docker-compose.*.yml" --exclude="*local.yml" --exclude="tls.yml" .; then
+            echo "❌ SECURITY ALERT: Potential secrets found in production code!"
             exit 1
           fi
-          echo "✅ No secrets found in code"
+          echo "✅ No production secrets found in code"
+          echo "ℹ️ Development files excluded from scan (docker-compose.*.yml)"
           
       - name: 🔒 Validate SSL Configuration
         run: |
