@@ -1,0 +1,409 @@
+version: '3.8'
+
+# ============================================
+# JLAM Platform - Local HTTPS Development  
+# ============================================
+# EXACT production SSL setup, but running locally
+# Uses: Real certificates + hosts file routing
+# Test: https://jlam.nl → localhost with production SSL
+# ============================================
+
+services:
+  # ============================================
+  # Traefik - Production SSL Configuration
+  # ============================================
+  traefik:
+    image: traefik:v3.0
+    container_name: jlam-traefik-https-local
+    restart: unless-stopped
+    
+    ports:
+      - "80:80"     # HTTP → HTTPS redirect
+      - "443:443"   # HTTPS (production SSL)
+      - "8080:8080" # Dashboard
+    
+    command:
+      # API & Dashboard
+      - "--api=true"
+      - "--api.dashboard=true"
+      - "--api.debug=true"
+      - "--api.insecure=true"
+      
+      # Docker Provider
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=jlam-platform_jlam-https-local"
+      
+      # File Provider for SSL Certificates (PRODUCTION METHOD!)
+      - "--providers.file.directory=/ssl-config"
+      - "--providers.file.watch=true"
+      
+      # Entrypoints
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      
+      # Redirect HTTP to HTTPS (PRODUCTION BEHAVIOR!)
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      
+      # Logging
+      - "--log.level=DEBUG"
+      - "--accesslog=true"
+      
+    volumes:
+      # Docker socket for service discovery
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      
+      # PRODUCTION SSL Certificates (REAL CERTIFICATES!)
+      - "./config/ssl:/ssl-certs:ro"
+      - "./config:/ssl-config:ro"
+      
+      # Logs
+      - "./logs/traefik-https:/logs"
+    
+    networks:
+      - jlam-https-local
+    
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=jlam-platform_jlam-https-local"
+      
+      # Dashboard access via HTTPS subdomain
+      - "traefik.http.routers.traefik-dashboard-https.rule=Host(`traefik.jlam.nl`)"
+      - "traefik.http.routers.traefik-dashboard-https.entrypoints=websecure"
+      - "traefik.http.routers.traefik-dashboard-https.tls=true"
+      - "traefik.http.routers.traefik-dashboard-https.service=api@internal"
+    
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ============================================
+  # PostgreSQL Database (Same as before)
+  # ============================================  
+  postgres:
+    image: postgres:15-alpine
+    container_name: jlam-postgres-https-local
+    restart: unless-stopped
+    
+    environment:
+      POSTGRES_DB: jlam_dev
+      POSTGRES_USER: jlam_user
+      POSTGRES_PASSWORD: dev_password_123
+      POSTGRES_MULTIPLE_DATABASES: "jlam_dev,authentik_dev,monitoring_dev"
+    
+    volumes:
+      - postgres_https_data:/var/lib/postgresql/data
+      - "./database/init:/docker-entrypoint-initdb.d"
+      
+    ports:
+      - "5434:5432"  # Different port to avoid conflict
+    
+    networks:
+      - jlam-https-local
+    
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jlam_user -d jlam_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # Redis Cache (Same as before)
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: jlam-redis-https-local
+    restart: unless-stopped
+    
+    command: redis-server --save 60 1 --loglevel warning --requirepass dev_redis_pass
+    
+    volumes:
+      - redis_https_data:/data
+      
+    ports:
+      - "6381:6379"  # Different port to avoid conflict
+    
+    networks:
+      - jlam-https-local
+    
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "dev_redis_pass", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ============================================
+  # Authentik Server (PRODUCTION SSL SETTINGS!)
+  # ============================================
+  authentik-server:
+    image: ghcr.io/goauthentik/server:2024.8
+    container_name: jlam-authentik-server-https-local
+    restart: unless-stopped
+    command: server
+    
+    environment:
+      # Database Configuration
+      AUTHENTIK_POSTGRESQL__HOST: postgres
+      AUTHENTIK_POSTGRESQL__PORT: 5432
+      AUTHENTIK_POSTGRESQL__NAME: authentik_dev
+      AUTHENTIK_POSTGRESQL__USER: jlam_user
+      AUTHENTIK_POSTGRESQL__PASSWORD: dev_password_123
+      
+      # Redis Configuration  
+      AUTHENTIK_REDIS__HOST: redis
+      AUTHENTIK_REDIS__PORT: 6379
+      AUTHENTIK_REDIS__PASSWORD: dev_redis_pass
+      AUTHENTIK_REDIS__DB: 0
+      
+      # Security Keys
+      AUTHENTIK_SECRET_KEY: "development-secret-key-at-least-50-chars-long-for-https-testing-only"
+      
+      # Cookie Configuration (PRODUCTION SETTINGS!)
+      AUTHENTIK_COOKIE__SECURE: "true"        # HTTPS required!
+      AUTHENTIK_COOKIE__HTTPONLY: "true"
+      AUTHENTIK_COOKIE__SAMESITE: "lax"
+      AUTHENTIK_COOKIE__DOMAIN: ".jlam.nl"    # Production domain with dot for subdomains!
+      
+      # Additional Security Headers
+      AUTHENTIK_WEB__USE_HTTPS: "true"
+      AUTHENTIK_WEB__COOKIE_SECURE: "true"
+      
+      # HTTPS/SSL Configuration
+      AUTHENTIK_WEB__EXTERNAL_HOST: "https://auth.jlam.nl"
+      AUTHENTIK_WEB__SECURE_PROXY_SSL_HEADER: "HTTP_X_FORWARDED_PROTO"
+      AUTHENTIK_WEB__USE_X_FORWARDED_FOR: "true"
+      AUTHENTIK_WEB__USE_X_FORWARDED_HOST: "true"
+      
+      # Log Level
+      AUTHENTIK_LOG_LEVEL: "debug"
+      
+      # Email Configuration (SMTP Settings)
+      AUTHENTIK_EMAIL__HOST: "smtp.gmail.com"
+      AUTHENTIK_EMAIL__PORT: 587
+      AUTHENTIK_EMAIL__USERNAME: "admin@jlam.nl"
+      AUTHENTIK_EMAIL__PASSWORD: "app-specific-password-here"
+      AUTHENTIK_EMAIL__USE_TLS: "true"
+      AUTHENTIK_EMAIL__USE_SSL: "false"
+      AUTHENTIK_EMAIL__FROM: "JLAM Platform <admin@jlam.nl>"
+      AUTHENTIK_EMAIL__TIMEOUT: 30
+      
+      # Bootstrap Admin User
+      AUTHENTIK_BOOTSTRAP_PASSWORD: "admin123"
+      AUTHENTIK_BOOTSTRAP_TOKEN: "dev-bootstrap-token"
+    
+    volumes:
+      - authentik_https_media:/media
+      - authentik_https_templates:/templates
+    
+    networks:
+      - jlam-https-local
+    
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=jlam-platform_jlam-https-local"
+      
+      # HTTPS Router (PRODUCTION BEHAVIOR!)
+      - "traefik.http.routers.authentik-https.rule=Host(`auth.jlam.nl`)"
+      - "traefik.http.routers.authentik-https.entrypoints=websecure"
+      - "traefik.http.routers.authentik-https.tls=true"
+      - "traefik.http.services.authentik-https.loadbalancer.server.port=9000"
+      
+      # Forward HTTPS headers to Authentik
+      - "traefik.http.middlewares.authentik-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
+      - "traefik.http.middlewares.authentik-headers.headers.customrequestheaders.X-Forwarded-Host=auth.jlam.nl"
+      - "traefik.http.middlewares.authentik-headers.headers.customrequestheaders.X-Forwarded-Port=443"
+      - "traefik.http.middlewares.authentik-headers.headers.customrequestheaders.X-Forwarded-Ssl=on"
+      - "traefik.http.routers.authentik-https.middlewares=authentik-headers"
+      
+      # Health Check
+      - "traefik.http.services.authentik-https.loadbalancer.healthcheck.path=/-/health/ready/"
+      - "traefik.http.services.authentik-https.loadbalancer.healthcheck.interval=30s"
+    
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9000/-/health/ready/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+  # ============================================
+  # Authentik Worker (Same environment as server)
+  # ============================================
+  authentik-worker:
+    image: ghcr.io/goauthentik/server:2024.8
+    container_name: jlam-authentik-worker-https-local
+    restart: unless-stopped
+    command: worker
+    
+    environment:
+      # Same as server
+      AUTHENTIK_POSTGRESQL__HOST: postgres
+      AUTHENTIK_POSTGRESQL__PORT: 5432
+      AUTHENTIK_POSTGRESQL__NAME: authentik_dev
+      AUTHENTIK_POSTGRESQL__USER: jlam_user
+      AUTHENTIK_POSTGRESQL__PASSWORD: dev_password_123
+      AUTHENTIK_REDIS__HOST: redis
+      AUTHENTIK_REDIS__PORT: 6379
+      AUTHENTIK_REDIS__PASSWORD: dev_redis_pass
+      AUTHENTIK_SECRET_KEY: "development-secret-key-at-least-50-chars-long-for-https-testing-only"
+      AUTHENTIK_LOG_LEVEL: "debug"
+      
+      # Email Configuration (Same as server)
+      AUTHENTIK_EMAIL__HOST: "smtp.gmail.com"
+      AUTHENTIK_EMAIL__PORT: 587
+      AUTHENTIK_EMAIL__USERNAME: "admin@jlam.nl"
+      AUTHENTIK_EMAIL__PASSWORD: "app-specific-password-here"
+      AUTHENTIK_EMAIL__USE_TLS: "true"
+      AUTHENTIK_EMAIL__USE_SSL: "false"
+      AUTHENTIK_EMAIL__FROM: "JLAM Platform <admin@jlam.nl>"
+      AUTHENTIK_EMAIL__TIMEOUT: 30
+    
+    volumes:
+      - authentik_https_media:/media
+      - authentik_https_templates:/templates
+    
+    networks:
+      - jlam-https-local
+    
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ============================================
+  # JLAM Landing Page (HTTPS version)
+  # ============================================
+  landing:
+    image: nginx:alpine
+    container_name: jlam-landing-https-local
+    restart: unless-stopped
+    
+    volumes:
+      - "./app:/usr/share/nginx/html:ro"
+    
+    networks:
+      - jlam-https-local
+    
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=jlam-platform_jlam-https-local"
+      
+      # HTTPS Main domain (PRODUCTION!)
+      - "traefik.http.routers.landing-https.rule=Host(`jlam.nl`)"
+      - "traefik.http.routers.landing-https.entrypoints=websecure"
+      - "traefik.http.routers.landing-https.tls=true"
+      - "traefik.http.routers.landing-https.service=landing-https-svc"
+      - "traefik.http.services.landing-https-svc.loadbalancer.server.port=80"
+      
+      # App subdomain (HTTPS)
+      - "traefik.http.routers.app-https.rule=Host(`app.jlam.nl`)"
+      - "traefik.http.routers.app-https.entrypoints=websecure"
+      - "traefik.http.routers.app-https.tls=true"
+      - "traefik.http.routers.app-https.service=app-https-svc"
+      - "traefik.http.services.app-https-svc.loadbalancer.server.port=80"
+
+  # ============================================
+  # Monitoring (HTTPS versions)
+  # ============================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: jlam-prometheus-https-local
+    restart: unless-stopped
+    
+    volumes:
+      - "./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro"
+      - prometheus_https_data:/prometheus
+    
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    
+    networks:
+      - jlam-https-local
+    
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=jlam-platform_jlam-https-local"
+      - "traefik.http.routers.prometheus-https.rule=Host(`monitor.jlam.nl`) && PathPrefix(`/prometheus`)"
+      - "traefik.http.routers.prometheus-https.entrypoints=websecure"
+      - "traefik.http.routers.prometheus-https.tls=true"
+      - "traefik.http.services.prometheus-https.loadbalancer.server.port=9090"
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: jlam-grafana-https-local
+    restart: unless-stopped
+    
+    ports:
+      - "3002:3000"  # Direct access + avoid conflict
+    
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_INSTALL_PLUGINS: redis-datasource
+      # HTTPS settings for production-like behavior
+      GF_SERVER_PROTOCOL: http
+      GF_SERVER_DOMAIN: monitor.jlam.nl
+      GF_SERVER_ROOT_URL: https://monitor.jlam.nl/
+    
+    volumes:
+      - grafana_https_data:/var/lib/grafana
+    
+    networks:
+      - jlam-https-local
+    
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=jlam-platform_jlam-https-local"
+      - "traefik.http.routers.grafana-https.rule=Host(`monitor.jlam.nl`)"
+      - "traefik.http.routers.grafana-https.entrypoints=websecure"  
+      - "traefik.http.routers.grafana-https.tls=true"
+      - "traefik.http.services.grafana-https.loadbalancer.server.port=3000"
+
+  # ============================================
+  # Traffic Spy (Monitor)
+  # ============================================
+  traffic-spy:
+    build:
+      context: ./traffic-spy
+      dockerfile: Dockerfile
+    container_name: jlam-traffic-spy-https-local
+    restart: unless-stopped
+    
+    networks:
+      - jlam-https-local
+    
+    depends_on:
+      - traefik
+      - authentik-server
+
+# ============================================
+# Networks & Volumes (HTTPS versions)
+# ============================================
+networks:
+  jlam-https-local:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.31.0.0/16
+
+volumes:
+  postgres_https_data:
+  redis_https_data:
+  authentik_https_media:
+  authentik_https_templates:
+  prometheus_https_data:
+  grafana_https_data:

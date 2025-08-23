@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JLAM Platform - Local Development</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            background: white;
+            padding: 3rem;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 600px;
+        }
+        h1 { 
+            color: #333;
+            margin-bottom: 1rem;
+            font-size: 2.5rem;
+        }
+        .subtitle {
+            color: #666;
+            font-size: 1.2rem;
+            margin-bottom: 2rem;
+        }
+        .status {
+            display: inline-block;
+            background: #4CAF50;
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 25px;
+            font-weight: bold;
+            margin-bottom: 2rem;
+        }
+        .services {
+            text-align: left;
+            margin-bottom: 2rem;
+        }
+        .service {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            margin: 0.5rem 0;
+            background: #f5f5f5;
+            border-radius: 10px;
+            transition: all 0.3s;
+        }
+        .service:hover {
+            background: #eee;
+            transform: translateX(5px);
+        }
+        .service a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .service a:hover {
+            text-decoration: underline;
+        }
+        .badge {
+            background: #667eea;
+            color: white;
+            padding: 0.3rem 0.8rem;
+            border-radius: 15px;
+            font-size: 0.8rem;
+        }
+        .footer {
+            color: #999;
+            font-size: 0.9rem;
+            margin-top: 2rem;
+        }
+        .warning {
+            background: #ff9800;
+            color: white;
+            padding: 1rem;
+            border-radius: 10px;
+            margin-bottom: 2rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏥 JLAM Platform</h1>
+        <div class="subtitle">Je Leefstijl Als Medicijn - Local HTTPS Development</div>
+        
+        <div class="status">🔒 HTTPS ENVIRONMENT ACTIVE</div>
+        
+        <div class="warning">
+            ⚠️ <strong>Production-Like HTTPS Environment</strong><br>
+            Deze omgeving gebruikt echte SSL certificaten en productie configuratie.
+        </div>
+        
+        <div class="services">
+            <h3 style="margin-bottom: 1rem; color: #333;">🔧 Available Services</h3>
+            
+            <div class="service">
+                <div>
+                    <strong>Traefik Dashboard</strong><br>
+                    <small>Reverse proxy configuration</small>
+                </div>
+                <div>
+                    <a href="http://localhost:8080/dashboard/" target="_blank">localhost:8080/dashboard/</a>
+                    <span class="badge">HTTP</span>
+                </div>
+            </div>
+            
+            <div class="service">
+                <div>
+                    <strong>Authentik SSO</strong><br>
+                    <small>Authentication & authorization</small>
+                </div>
+                <div>
+                    <a href="https://auth.jlam.nl" target="_blank">auth.jlam.nl</a>
+                    <span class="badge">🔒 HTTPS</span>
+                </div>
+            </div>
+            
+            <div class="service">
+                <div>
+                    <strong>App Platform</strong><br>
+                    <small>Main application (placeholder)</small>
+                </div>
+                <div>
+                    <a href="https://app.jlam.nl" target="_blank">app.jlam.nl</a>
+                    <span class="badge">🔒 HTTPS</span>
+                </div>
+            </div>
+            
+            <div class="service">
+                <div>
+                    <strong>Monitoring Dashboard</strong><br>
+                    <small>Grafana metrics & logs</small>
+                </div>
+                <div>
+                    <a href="https://monitor.jlam.nl" target="_blank">monitor.jlam.nl</a>
+                    <span class="badge">🔒 HTTPS</span>
+                </div>
+            </div>
+            
+            <div class="service">
+                <div>
+                    <strong>Prometheus Metrics</strong><br>
+                    <small>Raw metrics data</small>
+                </div>
+                <div>
+                    <div style="color: #999; font-style: italic;">Via Grafana dashboard</div>
+                    <span class="badge">Internal</span>
+                </div>
+            </div>
+        </div>
+        
+        <div style="text-align: left; background: #f9f9f9; padding: 1rem; border-radius: 10px;">
+            <h4 style="color: #333; margin-bottom: 0.5rem;">📊 Quick Status Check:</h4>
+            <div id="status-check">
+                <div>🔄 Checking services...</div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p><strong>Van ziekenzorg naar gezondheidszorg</strong></p>
+            <p>Stichting JLAM - Wim Tilburgs, Founder</p>
+            <p>Local HTTPS Development Environment | <span id="timestamp"></span></p>
+        </div>
+    </div>
+
+    <script>
+        // Update timestamp
+        document.getElementById('timestamp').textContent = new Date().toLocaleString('nl-NL');
+        
+        // Simple service status check
+        const services = [
+            { name: 'Traefik Dashboard', status: 'HTTP :8080' },
+            { name: 'Authentik SSO', status: 'HTTPS ✓' },
+            { name: 'App Platform', status: 'HTTPS ✓' },
+            { name: 'Monitor (Grafana)', status: 'HTTPS ✓' }
+        ];
+        
+        let statusHtml = '';
+        services.forEach(service => {
+            const color = service.status.includes('HTTPS') ? '#4CAF50' : '#FF9800';
+            statusHtml += `<div style="margin: 0.2rem 0;">• ${service.name}: <span style="color: ${color};">${service.status}</span></div>`;
+        });
+        
+        document.getElementById('status-check').innerHTML = statusHtml;
+    </script>
+</body>
+</html>

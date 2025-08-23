@@ -1,0 +1,105 @@
+# ============================================
+# JLAM Platform - Traefik SSL Configuration
+# ============================================
+# Uses PRODUCTION certificates locally for testing
+# Exact same setup as production deployment
+# ============================================
+
+tls:
+  # ============================================
+  # SSL Certificates (Production certificates!)
+  # ============================================
+  certificates:
+    - certFile: /ssl-certs/certificate.crt
+      keyFile: /ssl-certs/certificate.key
+      stores:
+        - default
+    
+    # Alternative certificate path (if using fullchain)
+    - certFile: /ssl-certs/fullchain.pem
+      keyFile: /ssl-certs/certificate.key
+      stores:
+        - default
+
+  # ============================================
+  # Certificate Stores
+  # ============================================
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /ssl-certs/certificate.crt
+        keyFile: /ssl-certs/certificate.key
+
+  # ============================================
+  # TLS Options (Production-grade security)
+  # ============================================
+  options:
+    default:
+      minVersion: "VersionTLS12"
+      maxVersion: "VersionTLS13"
+      cipherSuites:
+        - "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
+        - "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305"
+        - "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"
+        - "TLS_RSA_WITH_AES_256_GCM_SHA384"
+        - "TLS_RSA_WITH_AES_128_GCM_SHA256"
+      curvePreferences:
+        - "CurveP521"
+        - "CurveP384"
+        - "CurveP256"
+        - "X25519"
+
+# ============================================
+# HTTP Services & Routers (Production-like)
+# ============================================
+http:
+  # ============================================
+  # Middlewares (Security headers like production)
+  # ============================================
+  middlewares:
+    security-headers:
+      headers:
+        customRequestHeaders:
+          X-Forwarded-Proto: "https"
+        customResponseHeaders:
+          X-Robots-Tag: "noindex,nofollow,nosnippet,noarchive,notranslate,noimageindex"
+          X-Frame-Options: "DENY"
+          X-Content-Type-Options: "nosniff"
+          X-XSS-Protection: "1; mode=block"
+          Referrer-Policy: "strict-origin-when-cross-origin"
+          Content-Security-Policy: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'"
+        sslRedirect: true
+        sslTemporaryRedirect: false
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        forceSTSHeader: true
+
+    secure-auth:
+      headers:
+        customRequestHeaders:
+          X-Forwarded-Proto: "https"
+        sslRedirect: true
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+
+  # ============================================
+  # Services (Internal routing)
+  # ============================================
+  services:
+    # These services are defined via Docker labels
+    # This file provides SSL termination and security headers
+
+  # ============================================
+  # Routers (HTTPS routing rules)
+  # ============================================
+  routers:
+    # Main domain HTTPS redirect
+    https-redirect:
+      rule: "HostRegexp(`{host:.+}`)"
+      entryPoints:
+        - "web"
+      middlewares:
+        - "security-headers"
+      service: "api@internal"
+      priority: 1
