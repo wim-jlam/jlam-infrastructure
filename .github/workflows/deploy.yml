@@ -65,23 +65,13 @@ jobs:
         with:
           terraform_version: "1.7.0"
           
-      - name: 🔧 Setup Scaleway CLI
+      - name: 🔐 Configure Terraform Environment
         run: |
-          # Get the latest release URL
-          RELEASE_URL=$(curl -s https://api.github.com/repos/scaleway/scaleway-cli/releases/latest | grep "browser_download_url.*linux_amd64" | cut -d '"' -f 4)
-          curl -o /tmp/scw -L "$RELEASE_URL"
-          chmod +x /tmp/scw
-          sudo cp /tmp/scw /usr/local/bin/scw
-          
-      - name: 🔐 Configure Scaleway
-        run: |
-          mkdir -p ~/.config/scw
-          scw config set access-key=$SCALEWAY_ACCESS_KEY
-          scw config set secret-key=$SCALEWAY_SECRET_KEY
-          scw config set default-project-id=$SCALEWAY_DEFAULT_PROJECT_ID
-          scw config set default-organization-id=$SCALEWAY_DEFAULT_ORGANIZATION_ID
-          scw config set default-zone=nl-ams-1
-          scw config set default-region=nl-ams
+          echo "🔐 Setting up Terraform with Scaleway provider credentials..."
+          echo "TF_VAR_scaleway_access_key=$SCALEWAY_ACCESS_KEY" >> $GITHUB_ENV
+          echo "TF_VAR_scaleway_secret_key=$SCALEWAY_SECRET_KEY" >> $GITHUB_ENV
+          echo "TF_VAR_scaleway_project_id=$SCALEWAY_DEFAULT_PROJECT_ID" >> $GITHUB_ENV
+          echo "TF_VAR_scaleway_organization_id=$SCALEWAY_DEFAULT_ORGANIZATION_ID" >> $GITHUB_ENV
           
       - name: 🏗️ Create Terraform Configuration
         run: |
@@ -97,8 +87,12 @@ jobs:
           }
           
           provider "scaleway" {
-            zone   = "nl-ams-1"
-            region = "nl-ams"
+            access_key      = var.scaleway_access_key
+            secret_key      = var.scaleway_secret_key
+            project_id      = var.scaleway_project_id
+            organization_id = var.scaleway_organization_id
+            zone            = "nl-ams-1"
+            region          = "nl-ams"
           }
           
           # Retain existing IP - NEVER LOSE 51.158.190.109!
@@ -134,6 +128,28 @@ jobs:
             lifecycle {
               create_before_destroy = false
             }
+          }
+          
+          variable "scaleway_access_key" {
+            type        = string
+            description = "Scaleway access key"
+            sensitive   = true
+          }
+          
+          variable "scaleway_secret_key" {
+            type        = string
+            description = "Scaleway secret key"
+            sensitive   = true
+          }
+          
+          variable "scaleway_project_id" {
+            type        = string
+            description = "Scaleway project ID"
+          }
+          
+          variable "scaleway_organization_id" {
+            type        = string
+            description = "Scaleway organization ID"
           }
           
           variable "database_password" {
