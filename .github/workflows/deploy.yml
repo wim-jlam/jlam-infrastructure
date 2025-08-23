@@ -116,7 +116,7 @@ jobs:
             enable_ipv6         = false
             
             user_data = {
-              cloud-init = templatefile("${path.module}/../cloud-init.yml", {
+              cloud-init = templatefile("${path.module}/cloud-init.yml", {
                 database_password    = var.database_password
                 authentik_secret_key = var.authentik_secret_key
                 database_host       = var.database_host
