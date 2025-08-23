@@ -75,6 +75,7 @@ jobs:
           
       - name: 🔐 Configure Scaleway
         run: |
+          mkdir -p ~/.config/scw
           scw config set access-key=$SCALEWAY_ACCESS_KEY
           scw config set secret-key=$SCALEWAY_SECRET_KEY
           scw config set default-project-id=$SCALEWAY_DEFAULT_PROJECT_ID
