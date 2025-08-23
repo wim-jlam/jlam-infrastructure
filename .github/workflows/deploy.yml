@@ -67,8 +67,11 @@ jobs:
           
       - name: 🔧 Setup Scaleway CLI
         run: |
-          curl -o /tmp/scw -L "https://github.com/scaleway/scaleway-cli/releases/latest/download/scaleway-cli_*_linux_amd64"
-          install -o root -g root -m 755 /tmp/scw /usr/local/bin/scw
+          # Get the latest release URL
+          RELEASE_URL=$(curl -s https://api.github.com/repos/scaleway/scaleway-cli/releases/latest | grep "browser_download_url.*linux_amd64" | cut -d '"' -f 4)
+          curl -o /tmp/scw -L "$RELEASE_URL"
+          chmod +x /tmp/scw
+          sudo cp /tmp/scw /usr/local/bin/scw
           
       - name: 🔐 Configure Scaleway
         run: |
