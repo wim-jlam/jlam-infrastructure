@@ -67,11 +67,13 @@ jobs:
           
       - name: 🔐 Configure Terraform Environment
         run: |
-          echo "🔐 Setting up Terraform with Scaleway provider credentials..."
-          echo "TF_VAR_scaleway_access_key=$SCALEWAY_ACCESS_KEY" >> $GITHUB_ENV
-          echo "TF_VAR_scaleway_secret_key=$SCALEWAY_SECRET_KEY" >> $GITHUB_ENV
-          echo "TF_VAR_scaleway_project_id=$SCALEWAY_DEFAULT_PROJECT_ID" >> $GITHUB_ENV
-          echo "TF_VAR_scaleway_organization_id=$SCALEWAY_DEFAULT_ORGANIZATION_ID" >> $GITHUB_ENV
+          echo "🔐 Setting up Terraform with Scaleway environment variables..."
+          echo "SCW_ACCESS_KEY=$SCALEWAY_ACCESS_KEY" >> $GITHUB_ENV
+          echo "SCW_SECRET_KEY=$SCALEWAY_SECRET_KEY" >> $GITHUB_ENV
+          echo "SCW_DEFAULT_PROJECT_ID=$SCALEWAY_DEFAULT_PROJECT_ID" >> $GITHUB_ENV
+          echo "SCW_DEFAULT_ORGANIZATION_ID=$SCALEWAY_DEFAULT_ORGANIZATION_ID" >> $GITHUB_ENV
+          echo "SCW_DEFAULT_ZONE=nl-ams-1" >> $GITHUB_ENV
+          echo "SCW_DEFAULT_REGION=nl-ams" >> $GITHUB_ENV
           
       - name: 🏗️ Create Terraform Configuration
         run: |
@@ -87,12 +89,8 @@ jobs:
           }
           
           provider "scaleway" {
-            access_key      = var.scaleway_access_key
-            secret_key      = var.scaleway_secret_key
-            project_id      = var.scaleway_project_id
-            organization_id = var.scaleway_organization_id
-            zone            = "nl-ams-1"
-            region          = "nl-ams"
+            zone   = "nl-ams-1"
+            region = "nl-ams"
           }
           
           # Retain existing IP - NEVER LOSE 51.158.190.109!
@@ -128,28 +126,6 @@ jobs:
             lifecycle {
               create_before_destroy = false
             }
-          }
-          
-          variable "scaleway_access_key" {
-            type        = string
-            description = "Scaleway access key"
-            sensitive   = true
-          }
-          
-          variable "scaleway_secret_key" {
-            type        = string
-            description = "Scaleway secret key"
-            sensitive   = true
-          }
-          
-          variable "scaleway_project_id" {
-            type        = string
-            description = "Scaleway project ID"
-          }
-          
-          variable "scaleway_organization_id" {
-            type        = string
-            description = "Scaleway organization ID"
           }
           
           variable "database_password" {
