@@ -1,0 +1,153 @@
+#cloud-config
+# JLAM Production Server - CORRECTED CLOUD-INIT
+# Fixed syntax errors and simplified for reliable deployment
+
+hostname: jlam-production
+fqdn: jlam-production.jlam.nl
+
+# User configuration - CORRECT SYNTAX
+users:
+  - name: jlam
+    groups: [sudo, docker]
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+# Also configure root SSH access
+ssh_authorized_keys:
+  - ${ssh_public_key}
+
+# Package updates and installation - CORRECT SYNTAX
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - wget
+  - htop
+  - docker.io
+  - docker-compose-plugin
+  - unzip
+  - nano
+
+# Enable logging
+output:
+  all: "| tee -a /var/log/cloud-init-output.log"
+
+# Write files - CORRECTED SYNTAX
+write_files:
+  # Basic Docker Compose for initial deployment
+  - path: /home/jlam/docker-compose.yml
+    owner: jlam:jlam
+    permissions: '0644'
+    content: |
+      version: '3.8'
+      services:
+        traefik:
+          image: traefik:v3.0
+          container_name: jlam-traefik
+          restart: unless-stopped
+          ports:
+            - "80:80"
+            - "443:443"
+            - "8080:8080"
+          command:
+            - "--api=true"
+            - "--api.dashboard=true"
+            - "--api.insecure=true"
+            - "--providers.docker=true"
+            - "--providers.docker.exposedbydefault=false"
+            - "--providers.file.directory=/etc/traefik/dynamic"
+            - "--entrypoints.web.address=:80"
+            - "--entrypoints.websecure.address=:443"
+            - "--log.level=DEBUG"
+          volumes:
+            - "/var/run/docker.sock:/var/run/docker.sock:ro"
+            - "/home/jlam/config/ssl:/etc/ssl/jlam:ro"
+            - "/home/jlam/config/traefik:/etc/traefik/dynamic:ro"
+          networks:
+            - jlam-network
+        
+        nginx:
+          image: nginx:alpine
+          container_name: jlam-web
+          restart: unless-stopped
+          networks:
+            - jlam-network
+          labels:
+            - "traefik.enable=true"
+            - "traefik.http.routers.web.rule=Host('jlam.nl')"
+            - "traefik.http.routers.web.entrypoints=web"
+            - "traefik.http.routers.web-secure.rule=Host('jlam.nl')"
+            - "traefik.http.routers.web-secure.entrypoints=websecure"
+            - "traefik.http.routers.web-secure.tls=true"
+      
+      networks:
+        jlam-network:
+          driver: bridge
+
+  # SSL certificates (if available)
+  - path: /home/jlam/config/ssl/certificate.crt
+    owner: jlam:jlam
+    permissions: '0644'
+    encoding: base64
+    content: ${ssl_certificate_crt}
+
+  - path: /home/jlam/config/ssl/certificate.key
+    owner: jlam:jlam
+    permissions: '0600'
+    encoding: base64
+    content: ${ssl_certificate_key}
+
+  - path: /home/jlam/config/ssl/cabundle.crt
+    owner: jlam:jlam
+    permissions: '0644'
+    encoding: base64
+    content: ${ssl_cabundle_crt}
+
+  # Traefik SSL configuration
+  - path: /home/jlam/config/traefik/ssl.yml
+    owner: jlam:jlam
+    permissions: '0644'
+    content: |
+      tls:
+        certificates:
+          - certFile: /etc/ssl/jlam/certificate.crt
+            keyFile: /etc/ssl/jlam/certificate.key
+        stores:
+          default:
+            defaultCertificate:
+              certFile: /etc/ssl/jlam/certificate.crt
+              keyFile: /etc/ssl/jlam/certificate.key
+
+  # Deployment script
+  - path: /home/jlam/deploy.sh
+    owner: jlam:jlam
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -e
+      echo "=== JLAM Production Deployment $(date) ===" >> /var/log/jlam-deployment.log
+      cd /home/jlam
+      docker compose pull
+      docker compose up -d
+      echo "=== Deployment completed $(date) ===" >> /var/log/jlam-deployment.log
+
+# Run commands - CLEAN SYNTAX
+runcmd:
+  - mkdir -p /var/log/jlam /home/jlam/{app,config/ssl,config/traefik,database/init,monitoring,logs/traefik}
+  - chown -R jlam:jlam /home/jlam
+  - systemctl enable docker
+  - systemctl start docker
+  - usermod -aG docker jlam
+  - curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 -o /tmp/docker-compose
+  - install /tmp/docker-compose /usr/local/bin/docker-compose
+  - chmod +x /usr/local/bin/docker-compose
+  - chmod 600 /home/jlam/config/ssl/certificate.key || true
+  - chmod 644 /home/jlam/config/ssl/certificate.crt || true
+  - chmod 644 /home/jlam/config/ssl/cabundle.crt || true
+  - cd /home/jlam && sudo -u jlam docker-compose up -d
+
+# Final message
+final_message: "JLAM Production server deployment completed successfully!"

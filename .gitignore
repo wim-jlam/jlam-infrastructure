@@ -1,0 +1,20 @@
+# Terraform files
+*.tfstate
+*.tfstate.*
+*.tfplan
+.terraform/
+.terraform.lock.hcl
+
+# Deployment artifacts  
+deployment-*.json
+
+# Working files
+test-cloud-init.yml
+cloud-init-exact.yml
+DEVOPS-SESSION-RESTART.md
+
+# Keep these important files in version control:
+# - cloud-init-production-working.yml (our golden template)
+# - cloud-init-fixed.yml (backup template)
+# - main.tf, variables.tf, outputs.tf, providers.tf
+# - CLAUDE.md (project documentation)
